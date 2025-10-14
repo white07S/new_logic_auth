@@ -3,8 +3,11 @@ import logging
 import uuid
 from datetime import datetime
 from typing import Optional
+import secrets
+import hashlib
+import hmac
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
@@ -35,13 +38,30 @@ app = FastAPI(title="Azure Auth with RBAC")
 # Include test routes
 app.include_router(test_router)
 
-# Add CORS middleware
+# Import security middleware
+from security import (
+    SecurityHeadersMiddleware,
+    CSRFMiddleware,
+    RateLimitMiddleware,
+    SessionRotationMiddleware,
+    AuditLogger
+)
+
+# Add security middleware (order matters - add in reverse order of execution)
+# These execute from bottom to top
+app.add_middleware(SessionRotationMiddleware)
+app.add_middleware(CSRFMiddleware)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=100)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Add CORS middleware (should be last/outermost)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=config.CORS_ORIGINS,
+    allow_credentials=config.CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-CSRF-Token"],  # Allow frontend to read CSRF token header
 )
 
 
@@ -107,9 +127,12 @@ async def check_authorization_status(session_id: str):
     return AuthStatusResponse(status="pending")
 
 
-@app.post("/api/authorize/complete", response_model=TokenResponse)
+@app.post("/api/authorize/complete")
 async def complete_authorization(request: AuthCompleteRequest, response: Response):
-    """Complete authorization and persist session tied to Graph token."""
+    """Complete authorization and persist session tied to Graph token.
+
+    Returns minimal success response - client should fetch user data from /api/me endpoint.
+    """
     session = auth_sessions.get(request.session_id)
 
     if not session or session.get("status") != "completed":
@@ -148,9 +171,12 @@ async def complete_authorization(request: AuthCompleteRequest, response: Respons
         roles=roles,
     )
 
+    # Generate secure session ID
+    session_id = secrets.token_urlsafe(32)
     device_id = str(uuid.uuid4())
     token_hash = hash_token(graph_token)
 
+    # Store session in database
     db.create_session(
         user_id=user_record["id"],
         username=user_record["username"],
@@ -161,25 +187,47 @@ async def complete_authorization(request: AuthCompleteRequest, response: Respons
         azure_object_id=azure_object_id,
         azure_tenant_id=azure_tenant_id,
         azure_token_expires_on=original_expires_on,
+        session_id=session_id,  # Store session ID for rotation tracking
     )
 
-    set_auth_cookies(response, graph_token)
+    # Set secure cookies
+    set_auth_cookies(response, graph_token, session_id)
+
+    # Set fingerprint as HttpOnly cookie
+    is_production = config.ENVIRONMENT == "production"
+    cookie_prefix = "__Host-" if is_production else ""
 
     response.set_cookie(
-        key="fingerprint",
+        key=f"{cookie_prefix}fingerprint",
         value=fingerprint,
-        httponly=False,
+        httponly=True,  # Changed to HttpOnly for security
         max_age=config.GRAPH_TOKEN_TTL_MINUTES * 60,
-        samesite="lax",
+        samesite="strict" if is_production else "lax",
+        secure=is_production,
+        path="/"
     )
 
+    # Generate CSRF token
+    csrf_token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        key=f"{cookie_prefix}csrf_token",
+        value=csrf_token,
+        httponly=False,  # JavaScript needs to read this for CSRF protection
+        max_age=config.GRAPH_TOKEN_TTL_MINUTES * 60,
+        samesite="strict" if is_production else "lax",
+        secure=is_production,
+        path="/"
+    )
+
+    # Clean up auth session
     auth_sessions.pop(request.session_id, None)
 
-    return TokenResponse(
-        token_expires_at=token_expires_at,
-        user=UserResponse(**user_record),
-        roles=user_record["roles"],
-    )
+    # Return minimal response - no sensitive data
+    return {
+        "success": True,
+        "message": "Authentication completed successfully",
+        "csrf_token": csrf_token  # Client needs this for subsequent requests
+    }
 
 
 @app.post("/api/auth/logout")
@@ -200,21 +248,80 @@ async def logout(response: Response, graph_access_token: Optional[str] = Cookie(
 
 @app.get("/api/me", response_model=UserResponse)
 async def get_current_user_info(current_user=Depends(get_current_user)):
-    """Get current user information."""
+    """Get current user information.
+
+    This endpoint is used by the frontend to fetch user data after authentication.
+    All user data is fetched from the server, eliminating localStorage dependency.
+    """
     user = db.get_user_by_id(current_user.user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # Log session access
+    AuditLogger.log_session_event(
+        "access",
+        current_user.session_id,
+        {"endpoint": "/api/me", "user_id": current_user.user_id}
+    )
+
     return UserResponse(**user)
 
 
 @app.get("/api/check-auth")
-async def check_auth(current_user=Depends(get_current_user)):
-    """Check if user is authenticated."""
-    return {
+async def check_auth(request: Request, current_user=Depends(get_current_user)):
+    """Check if user is authenticated and return session state.
+
+    This endpoint is used by the frontend to check authentication status
+    without relying on localStorage. Returns all necessary session data.
+    """
+    # Get CSRF token from cookie for frontend
+    is_production = config.ENVIRONMENT == "production"
+    csrf_cookie_name = f"__Host-csrf_token" if is_production else "csrf_token"
+    csrf_token = request.cookies.get(csrf_cookie_name)
+
+    response_data = {
         "authenticated": True,
-        "email": current_user.email,
-        "roles": current_user.roles,
-        "token_expires_at": current_user.token_expires_at,
+        "user": {
+            "id": current_user.user_id,
+            "email": current_user.email,
+            "roles": current_user.roles,
+        },
+        "session": {
+            "id": current_user.session_id,
+            "device_id": current_user.device_id,
+            "expires_at": current_user.token_expires_at,
+        },
+        "csrf_token": csrf_token,  # Frontend needs this for API requests
+    }
+
+    # Fetch additional user details
+    user = db.get_user_by_id(current_user.user_id)
+    if user:
+        response_data["user"]["username"] = user.get("username")
+        response_data["user"]["is_active"] = user.get("is_active", True)
+        response_data["user"]["last_login"] = user.get("last_login")
+
+    return response_data
+
+
+@app.get("/api/session/info")
+async def get_session_info(current_user=Depends(get_current_user)):
+    """Get detailed session information.
+
+    Provides session details for the frontend to display token status
+    and other session-related information.
+    """
+    session = db.get_session_by_id(current_user.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    return {
+        "session_id": session.get("session_id"),
+        "device_id": session.get("device_id"),
+        "created_at": session.get("created_at"),
+        "last_used_at": session.get("last_used_at"),
+        "expires_at": session.get("token_expires_at"),
+        "rotated": session.get("rotated", False),
     }
 
 

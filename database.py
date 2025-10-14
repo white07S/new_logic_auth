@@ -89,11 +89,13 @@ class Database:
         azure_object_id: str,
         azure_tenant_id: Optional[str] = None,
         azure_token_expires_on: Optional[str] = None,
+        session_id: Optional[str] = None,
     ) -> Dict:
         """Persist a session tied to a hashed Graph access token."""
         now = datetime.utcnow().isoformat()
         session_doc = {
             "id": uuid.uuid4().hex,
+            "session_id": session_id or uuid.uuid4().hex,  # Use provided or generate new
             "user_id": user_id,
             "username": username,
             "azure_object_id": azure_object_id,
@@ -105,6 +107,7 @@ class Database:
             "azure_token_expires_on": azure_token_expires_on,
             "created_at": now,
             "last_used_at": now,
+            "rotated": False,  # Track if session has been rotated
         }
 
         doc_id = self.sessions.insert(session_doc)
@@ -116,6 +119,13 @@ class Database:
         session = self.sessions.get(Session.token_hash == token_hash)
         if session:
             logger.debug("Resolved session %s for token hash", session["id"])
+        return session
+
+    def get_session_by_id(self, session_id: str) -> Optional[Dict]:
+        Session = Query()
+        session = self.sessions.get(Session.id == session_id)
+        if session:
+            logger.debug("Resolved session %s by id", session_id)
         return session
 
     def touch_session(self, session_id: str, token_expires_at: Optional[str] = None):

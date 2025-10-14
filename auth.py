@@ -34,23 +34,57 @@ def verify_fingerprint(stored_fingerprint: str, provided_fingerprint: str) -> bo
     return stored_fingerprint == provided_fingerprint
 
 
-def set_auth_cookies(response: Response, access_token: str):
-    """Set HttpOnly cookies for the Graph access token."""
+def set_auth_cookies(response: Response, access_token: str, session_id: str = None):
+    """Set secure HttpOnly cookies for authentication.
+
+    Using __Host- prefix for maximum security (requires Secure, HttpOnly, Path=/, no Domain).
+    For development, using regular prefix with secure flag configurable.
+    """
     max_age = config.GRAPH_TOKEN_TTL_MINUTES * 60
+    is_production = config.ENVIRONMENT == "production"
+
+    # Use __Host- prefix in production for maximum security
+    cookie_prefix = "__Host-" if is_production else ""
+
+    # Access token cookie (HttpOnly, cannot be accessed by JavaScript)
     response.set_cookie(
-        key="graph_access_token",
+        key=f"{cookie_prefix}graph_access_token",
         value=access_token,
         httponly=True,
         max_age=max_age,
-        samesite="lax",
-        secure=False,  # Set to True when HTTPS is enforced
+        samesite="strict" if is_production else "lax",
+        secure=is_production,  # HTTPS required in production
+        path="/"
     )
+
+    # Session ID cookie for tracking (HttpOnly)
+    if session_id:
+        response.set_cookie(
+            key=f"{cookie_prefix}session_id",
+            value=session_id,
+            httponly=True,
+            max_age=max_age,
+            samesite="strict" if is_production else "lax",
+            secure=is_production,
+            path="/"
+        )
 
 
 def clear_auth_cookies(response: Response):
     """Remove authentication cookies from the response."""
-    response.delete_cookie("graph_access_token")
-    response.delete_cookie("fingerprint")
+    is_production = config.ENVIRONMENT == "production"
+    cookie_prefix = "__Host-" if is_production else ""
+
+    # Delete all auth-related cookies
+    response.delete_cookie(f"{cookie_prefix}graph_access_token", path="/")
+    response.delete_cookie(f"{cookie_prefix}session_id", path="/")
+    response.delete_cookie(f"{cookie_prefix}fingerprint", path="/")
+    response.delete_cookie(f"{cookie_prefix}csrf_token", path="/")
+
+    # Also delete old format cookies during transition
+    response.delete_cookie("graph_access_token", path="/")
+    response.delete_cookie("fingerprint", path="/")
+    response.delete_cookie("session_id", path="/")
 
 
 async def _run_az_command(command: list, env: Dict[str, str]) -> str:

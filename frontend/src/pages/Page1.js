@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Calendar, Activity, ArrowRight, Lock, TestTube, CheckCircle, XCircle } from 'lucide-react';
-import { isAuthenticated, getCurrentUser } from '../utils/auth';
+import { isAuthenticated } from '../utils/auth';
 import { authAPI } from '../utils/api';
 import api from '../utils/api';
 import TokenStatus from '../components/TokenStatus';
 
 const Page1 = ({ onShowSnackbar }) => {
   const navigate = useNavigate();
-  const [user, setUser] = useState(getCurrentUser());
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const [testResults, setTestResults] = useState([]);
@@ -16,17 +16,21 @@ const Page1 = ({ onShowSnackbar }) => {
 
   useEffect(() => {
     const checkAuth = async () => {
-      if (!isAuthenticated()) {
-        setLoading(false);
-        setHasAccess(false);
-        return;
-      }
-
       try {
+        // Check if authenticated
+        const isAuth = await isAuthenticated();
+        if (!isAuth) {
+          setLoading(false);
+          setHasAccess(false);
+          return;
+        }
+
+        // Fetch current user data from server
         const userData = await authAPI.getCurrentUser();
         setUser(userData);
         setHasAccess(true);
       } catch (error) {
+        console.error('Auth check failed:', error);
         setHasAccess(false);
       } finally {
         setLoading(false);
@@ -319,23 +323,23 @@ const Page1 = ({ onShowSnackbar }) => {
             because your account has the necessary permissions.
           </p>
           <div className="border-t border-gray-200 pt-4 mt-4">
-            <h3 className="text-lg font-semibold text-black mb-3">Available Features</h3>
+            <h3 className="text-lg font-semibold text-black mb-3">Enhanced Security Features</h3>
             <ul className="space-y-2 text-gray-600">
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>Access to secure documents and resources</span>
+                <span>No sensitive data stored in browser (localStorage removed)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>Calendar and scheduling management</span>
+                <span>Session managed via secure HttpOnly cookies</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>Activity monitoring and audit logs</span>
+                <span>CSRF protection with double-submit cookies</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>Role-based access to additional features</span>
+                <span>Server-side session validation on every request</span>
               </li>
             </ul>
           </div>

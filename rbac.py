@@ -2,8 +2,9 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 
+import config
 from auth import hash_token, verify_fingerprint
 from database import db
 from models import TokenData
@@ -11,22 +12,37 @@ from models import TokenData
 logger = logging.getLogger(__name__)
 
 
+def get_cookie_name(base_name: str) -> str:
+    """Get the appropriate cookie name based on environment."""
+    is_production = config.ENVIRONMENT == "production"
+    return f"__Host-{base_name}" if is_production else base_name
+
+
 async def get_current_user(
-    graph_access_token: Optional[str] = Cookie(None),
-    fingerprint: Optional[str] = Cookie(None),
+    request: Request,
+    graph_access_token: Optional[str] = Cookie(None, alias="graph_access_token"),
+    fingerprint: Optional[str] = Cookie(None, alias="fingerprint"),
 ) -> TokenData:
     """
     Resolve the current authenticated user using the stored Graph access token.
     Validates token existence, expiration, and browser fingerprint.
     """
-    if not graph_access_token:
+    # Try to get cookies with environment-specific names
+    token_cookie_name = get_cookie_name("graph_access_token")
+    fingerprint_cookie_name = get_cookie_name("fingerprint")
+
+    # Get token from appropriate cookie
+    actual_token = request.cookies.get(token_cookie_name) or graph_access_token
+    actual_fingerprint = request.cookies.get(fingerprint_cookie_name) or fingerprint
+
+    if not actual_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token_hash = hash_token(graph_access_token)
+    token_hash = hash_token(actual_token)
     session = db.get_session_by_token_hash(token_hash)
     if not session:
         raise HTTPException(
@@ -52,8 +68,8 @@ async def get_current_user(
             )
 
     stored_fingerprint = session.get("fingerprint")
-    if stored_fingerprint and fingerprint:
-        if not verify_fingerprint(stored_fingerprint, fingerprint):
+    if stored_fingerprint and actual_fingerprint:
+        if not verify_fingerprint(stored_fingerprint, actual_fingerprint):
             logger.warning(
                 "Fingerprint mismatch for user session %s", session.get("id")
             )
