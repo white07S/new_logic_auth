@@ -85,11 +85,15 @@ async def get_current_user(
             detail="User not found or inactive",
         )
 
+    session_cookie_id = session.get("session_id")
+    session_record_id = session.get("id")
+
     return TokenData(
         email=user["email"],
         user_id=user["id"],
         roles=user["roles"],
-        session_id=session["id"],
+        session_id=session_cookie_id,
+        session_record_id=session_record_id,
         device_id=session.get("device_id"),
         fingerprint=stored_fingerprint,
         token_expires_at=expires_at_str,

@@ -288,6 +288,7 @@ async def check_auth(request: Request, current_user=Depends(get_current_user)):
         },
         "session": {
             "id": current_user.session_id,
+            "record_id": current_user.session_record_id,
             "device_id": current_user.device_id,
             "expires_at": current_user.token_expires_at,
         },
@@ -311,7 +312,14 @@ async def get_session_info(current_user=Depends(get_current_user)):
     Provides session details for the frontend to display token status
     and other session-related information.
     """
-    session = db.get_session_by_id(current_user.session_id)
+    session = None
+
+    if current_user.session_id:
+        session = db.get_session_by_session_id(current_user.session_id)
+
+    if not session and current_user.session_record_id:
+        session = db.get_session_by_id(current_user.session_record_id)
+
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 

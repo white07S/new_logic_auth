@@ -31,6 +31,7 @@ class TokenData(BaseModel):
     user_id: Optional[str] = None
     roles: List[str] = []
     session_id: Optional[str] = None
+    session_record_id: Optional[str] = None
     device_id: Optional[str] = None
     fingerprint: Optional[str] = None
     token_expires_at: Optional[str] = None

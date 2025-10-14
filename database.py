@@ -121,6 +121,14 @@ class Database:
             logger.debug("Resolved session %s for token hash", session["id"])
         return session
 
+    def get_session_by_session_id(self, session_id: str) -> Optional[Dict]:
+        """Fetch a session using the issued session identifier."""
+        Session = Query()
+        session = self.sessions.get(Session.session_id == session_id)
+        if session:
+            logger.debug("Resolved session %s for session_id", session["id"])
+        return session
+
     def get_session_by_id(self, session_id: str) -> Optional[Dict]:
         Session = Query()
         session = self.sessions.get(Session.id == session_id)

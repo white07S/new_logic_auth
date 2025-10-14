@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/Header';
 import Snackbar from './components/Snackbar';
@@ -14,47 +14,72 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // Check auth state on mount
-  useEffect(() => {
-    const checkAuth = async () => {
+  const syncAuthState = useCallback(
+    async ({ forceRefresh = false, showLoading = false } = {}) => {
       try {
-        setAuthLoading(true);
+        if (showLoading) {
+          setAuthLoading(true);
+        }
+
+        if (forceRefresh) {
+          await refreshAuth();
+        }
+
         const isAuth = await isAuthenticated();
         const user = isAuth ? await getCurrentUser() : null;
 
         setAuthenticated(isAuth);
         setCurrentUser(user);
       } catch (error) {
-        console.error('Auth check failed:', error);
+        console.error('Auth sync failed:', error);
         setAuthenticated(false);
         setCurrentUser(null);
       } finally {
-        setAuthLoading(false);
+        if (showLoading) {
+          setAuthLoading(false);
+        }
       }
+    },
+    []
+  );
+
+  // Initial auth check on mount
+  useEffect(() => {
+    syncAuthState({ showLoading: true });
+  }, [syncAuthState]);
+
+  // Background polling only when authenticated
+  useEffect(() => {
+    if (!authenticated) {
+      return;
+    }
+
+    let isActive = true;
+
+    const pollAuth = async () => {
+      if (!isActive) return;
+      await syncAuthState();
     };
 
-    // Check immediately
-    checkAuth();
+    // Run an immediate refresh so session info stays current
+    pollAuth();
 
-    // Set up periodic auth check (every 30 seconds to sync with cache)
-    const intervalId = setInterval(checkAuth, 30000);
+    const intervalId = setInterval(pollAuth, 30000);
 
-    // Check on visibility change (when tab becomes active)
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        checkAuth();
+        pollAuth();
       }
     };
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Note: We no longer listen to storage events since we don't use localStorage
-    // Cross-tab logout will be handled by the server invalidating the session
-
     return () => {
+      isActive = false;
       clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [authenticated, syncAuthState]);
 
   const showSnackbar = (message, type = 'info') => {
     setSnackbar({ message, type });
@@ -66,15 +91,7 @@ function App() {
 
   const handleAuthChange = async () => {
     try {
-      // Force refresh auth state from server
-      await refreshAuth();
-
-      const isAuth = await isAuthenticated();
-      const user = isAuth ? await getCurrentUser() : null;
-
-      console.log('Auth changed:', { authenticated: isAuth, user });
-      setAuthenticated(isAuth);
-      setCurrentUser(user);
+      await syncAuthState({ forceRefresh: true });
     } catch (error) {
       console.error('Failed to refresh auth:', error);
       setAuthenticated(false);
