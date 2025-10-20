@@ -1,99 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Settings, Database, Users, Shield, Lock } from 'lucide-react';
-import { isAuthenticated, getCurrentUser } from '../utils/auth';
-import { authAPI } from '../utils/api';
+import React from 'react';
+import { Settings, Database, Users, Shield } from 'lucide-react';
 
-const Page2 = ({ onShowSnackbar }) => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState(getCurrentUser());
-  const [loading, setLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
-  const [isAdminOnly, setIsAdminOnly] = useState(false);
+const Page2 = ({ currentUser }) => {
+  const user = currentUser;
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      if (!isAuthenticated()) {
-        setLoading(false);
-        setHasAccess(false);
-        return;
-      }
-
-      try {
-        const userData = await authAPI.getCurrentUser();
-        setUser(userData);
-        console.log('Page2 - User data:', userData);
-        console.log('Page2 - Checking roles:', userData.roles);
-        console.log('Page2 - Has admin?', userData.roles.includes('admin'));
-
-        // Page2 requires admin role - demonstrate role-based access
-        if (userData.roles && userData.roles.includes('admin')) {
-          console.log('Page2 - Access granted');
-          setHasAccess(true);
-          setIsAdminOnly(true);
-        } else {
-          console.log('Page2 - Access denied');
-          setHasAccess(false);
-          setIsAdminOnly(true);
-        }
-      } catch (error) {
-        console.error('Page2 - Error:', error);
-        setHasAccess(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, [navigate, onShowSnackbar]);
-
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-red-600 border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  if (!hasAccess) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock className="text-red-600" size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-black mb-2">
-            {isAdminOnly ? 'Admin Access Required' : 'Access Denied'}
-          </h2>
-          <p className="text-gray-600 mb-2">
-            {isAdminOnly
-              ? 'This page requires administrator privileges.'
-              : 'You don\'t have permission to access this page.'}
-          </p>
-          {user && (
-            <div className="bg-gray-50 rounded p-4 mb-6 text-left">
-              <p className="text-sm text-gray-600 mb-1">Current User:</p>
-              <p className="text-sm font-medium text-black">{user.email}</p>
-              <p className="text-sm text-gray-600 mt-2 mb-1">Your Roles:</p>
-              <div className="flex gap-2">
-                {user.roles.map(role => (
-                  <span key={role} className="px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs">
-                    {role}
-                  </span>
-                ))}
-              </div>
-              <p className="text-sm text-red-600 mt-3">Required: admin</p>
-            </div>
-          )}
-          <button
-            onClick={() => navigate('/')}
-            className="bg-red-600 text-white px-6 py-3 rounded hover:bg-red-700 transition-colors font-medium"
-          >
-            Go to Home
-          </button>
-        </div>
-      </div>
-    );
+  if (!user) {
+    return null;
   }
 
   return (

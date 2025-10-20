@@ -1,44 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { FileText, Calendar, Activity, ArrowRight, Lock, TestTube, CheckCircle, XCircle } from 'lucide-react';
-import { isAuthenticated } from '../utils/auth';
-import { authAPI } from '../utils/api';
+import React, { useState } from 'react';
+import { FileText, Calendar, Activity, ArrowRight, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import TokenStatus from '../components/TokenStatus';
 
-const Page1 = ({ onShowSnackbar }) => {
-  const navigate = useNavigate();
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [hasAccess, setHasAccess] = useState(false);
+const Page1 = ({ currentUser }) => {
   const [testResults, setTestResults] = useState([]);
   const [testingInProgress, setTestingInProgress] = useState(false);
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Check if authenticated
-        const isAuth = await isAuthenticated();
-        if (!isAuth) {
-          setLoading(false);
-          setHasAccess(false);
-          return;
-        }
-
-        // Fetch current user data from server
-        const userData = await authAPI.getCurrentUser();
-        setUser(userData);
-        setHasAccess(true);
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        setHasAccess(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAuth();
-  }, [navigate, onShowSnackbar]);
 
   const testEndpoint = async (name, method, url, body = null) => {
     try {
@@ -90,34 +57,10 @@ const Page1 = ({ onShowSnackbar }) => {
     setTestingInProgress(false);
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-red-600 border-t-transparent"></div>
-      </div>
-    );
-  }
+  const user = currentUser;
 
-  if (!hasAccess) {
-    return (
-      <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center max-w-md">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock className="text-red-600" size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-black mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-6">
-            You don't have permission to access this page. Please login with appropriate credentials.
-          </p>
-          <button
-            onClick={() => navigate('/')}
-            className="bg-red-600 text-white px-6 py-3 rounded hover:bg-red-700 transition-colors font-medium"
-          >
-            Go to Home
-          </button>
-        </div>
-      </div>
-    );
+  if (!user) {
+    return null;
   }
 
   return (
