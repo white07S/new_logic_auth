@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import Snackbar from './components/Snackbar';
+import LoginModal from './components/LoginModal';
 import Home from './pages/Home';
 import Page1 from './pages/Page1';
 import Page2 from './pages/Page2';
@@ -90,9 +91,67 @@ function App() {
     );
   };
 
-  const ProtectedRoute = ({ children, requiredRoles = [] }) => {
+  const NotAuthenticated = ({ pageName, onAuthChange }) => {
+    const navigate = useNavigate();
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+    const handleLoginSuccess = (userData) => {
+      onAuthChange();
+      setIsLoginModalOpen(false);
+      // Page will automatically re-render with authenticated content
+    };
+
+    const handleLoginError = (message) => {
+      // Error handling is done in the LoginModal itself
+      console.error('Login error:', message);
+    };
+
+    return (
+      <>
+        <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center max-w-md">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-black mb-2">Login Required</h2>
+            <p className="text-gray-600 mb-2">
+              You are not currently logged in.
+            </p>
+            <p className="text-gray-600 mb-6">
+              {pageName ? `Please sign in to access ${pageName}.` : 'Please sign in to access this page.'}
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={() => setIsLoginModalOpen(true)}
+                className="w-full bg-red-600 text-white px-6 py-3 rounded hover:bg-red-700 transition-colors font-medium"
+              >
+                Sign In
+              </button>
+              <button
+                onClick={() => navigate('/')}
+                className="w-full bg-gray-200 text-gray-700 px-6 py-3 rounded hover:bg-gray-300 transition-colors font-medium"
+              >
+                Go to Home
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <LoginModal
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+          onLoginSuccess={handleLoginSuccess}
+          onLoginError={handleLoginError}
+        />
+      </>
+    );
+  };
+
+  const ProtectedRoute = ({ children, requiredRoles = [], pageName }) => {
     if (!authenticated) {
-      return <Navigate to="/" replace />;
+      return <NotAuthenticated pageName={pageName} onAuthChange={syncAuthState} />;
     }
 
     if (!currentUser) {
@@ -186,7 +245,7 @@ function App() {
           <Route
             path="/page1"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute pageName="Page 1">
                 <Page1 currentUser={currentUser} />
               </ProtectedRoute>
             }
@@ -194,7 +253,7 @@ function App() {
           <Route
             path="/page2"
             element={
-              <ProtectedRoute requiredRoles={['admin']}>
+              <ProtectedRoute pageName="Page 2" requiredRoles={['admin']}>
                 <Page2 currentUser={currentUser} />
               </ProtectedRoute>
             }
