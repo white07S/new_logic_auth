@@ -268,7 +268,14 @@ function App() {
           onAuthChange={handleAuthChange}
         />
         <Routes>
-          <Route path="/" element={<Home authenticated={authenticated} />} />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute pageName="Home">
+                <Home authenticated={authenticated} currentUser={currentUser} />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/page1"
             element={

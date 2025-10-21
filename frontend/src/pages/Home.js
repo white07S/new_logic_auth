@@ -2,8 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, Key } from 'lucide-react';
 
-const Home = ({ authenticated }) => {
+const Home = ({ authenticated, currentUser }) => {
   const navigate = useNavigate();
+
+  const userName = currentUser?.username || currentUser?.email || 'User';
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50">
@@ -54,7 +56,7 @@ const Home = ({ authenticated }) => {
         {/* CTA Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
           <h2 className="text-3xl font-bold text-black mb-4">
-            {authenticated ? 'Welcome Back!' : 'Get Started Today'}
+            {authenticated ? `Welcome back, ${userName}!` : 'Get Started Today'}
           </h2>
           <p className="text-gray-600 mb-8 max-w-xl mx-auto">
             {authenticated
