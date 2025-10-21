@@ -30,7 +30,8 @@ AZURE_ROLE_GROUP_MAPPING: Dict[str, List[str]] = {
 }
 
 # Default role assigned when no group mapping matches
-DEFAULT_ROLE = os.getenv("DEFAULT_ROLE", "user").strip() or "user"
+# Empty string disables automatic authorization so users without mapped roles remain unauthorized
+DEFAULT_ROLE = os.getenv("DEFAULT_ROLE", "").strip()
 
 # Security settings
 CSRF_SECRET_KEY = os.getenv("CSRF_SECRET_KEY", secrets.token_hex(32))

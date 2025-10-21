@@ -172,7 +172,9 @@ const Page2 = ({ currentUser }) => {
                 </div>
                 <div className="p-4 bg-gray-50 rounded">
                   <p className="text-sm text-gray-500 mb-1">Account Type</p>
-                  <p className="text-gray-900 font-medium capitalize">{user?.roles?.[0] || 'User'}</p>
+                  <p className="text-gray-900 font-medium capitalize">
+                    {user?.roles?.[0] || 'Unassigned'}
+                  </p>
                 </div>
               </div>
             </div>

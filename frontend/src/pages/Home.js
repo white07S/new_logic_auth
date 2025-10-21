@@ -114,7 +114,7 @@ const Home = ({ authenticated }) => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>Page 2: User-level access required</span>
+                <span>Page 2: Admin-level access required</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>

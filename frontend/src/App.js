@@ -49,8 +49,15 @@ function App() {
     syncAuthState({ showLoading: true });
   }, [syncAuthState]);
 
-  const AccessDenied = ({ requiredRoles }) => {
+  const AccessDenied = ({ requiredRoles, reason }) => {
     const navigate = useNavigate();
+    const rolesArray = requiredRoles || [];
+    const hasRoleRequirement = rolesArray.length > 0;
+    const defaultMessage = hasRoleRequirement
+      ? `This page requires one of the following roles: ${rolesArray.join(', ')}.`
+      : 'You must be signed in to view this page.';
+    const primaryMessage = reason || defaultMessage;
+
     return (
       <div className="min-h-[calc(100vh-64px)] bg-gray-50 flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center max-w-md">
@@ -58,11 +65,10 @@ function App() {
             <span className="text-red-600 text-2xl font-bold">!</span>
           </div>
           <h2 className="text-2xl font-bold text-black mb-2">Access Restricted</h2>
-          <p className="text-gray-600 mb-4">
-            {requiredRoles && requiredRoles.length > 0
-              ? `This page requires one of the following roles: ${requiredRoles.join(', ')}.`
-              : 'You must be signed in to view this page.'}
-          </p>
+          <p className="text-gray-600 mb-4">{primaryMessage}</p>
+          {reason && hasRoleRequirement && (
+            <p className="text-gray-500 mb-4">{defaultMessage}</p>
+          )}
           {currentUser && (
             <div className="bg-gray-50 rounded p-4 mb-6 text-left">
               <p className="text-sm text-gray-600 mb-1">Current User:</p>
@@ -155,14 +161,35 @@ function App() {
     }
 
     if (!currentUser) {
-      return <AccessDenied requiredRoles={requiredRoles} />;
+      return (
+        <AccessDenied
+          requiredRoles={requiredRoles}
+          reason="Your session could not be verified. Please sign in again."
+        />
+      );
+    }
+
+    const userRoles = currentUser.roles || [];
+
+    if (userRoles.length === 0) {
+      return (
+        <AccessDenied
+          requiredRoles={requiredRoles}
+          reason="Your account does not have any roles assigned. Please contact an administrator."
+        />
+      );
     }
 
     if (
       requiredRoles.length > 0 &&
-      !requiredRoles.some((role) => currentUser.roles?.includes(role))
+      !requiredRoles.some((role) => userRoles.includes(role))
     ) {
-      return <AccessDenied requiredRoles={requiredRoles} />;
+      return (
+        <AccessDenied
+          requiredRoles={requiredRoles}
+          reason="You do not have the necessary permissions for this page."
+        />
+      );
     }
 
     return children;
