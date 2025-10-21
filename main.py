@@ -2,12 +2,9 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
 import secrets
-import hashlib
-import hmac
 
-from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, Request
+from fastapi import Depends, FastAPI, HTTPException, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 import config
@@ -26,7 +23,7 @@ from models import (
     TokenResponse,
     UserResponse,
 )
-from rbac import get_current_user, require_admin, require_user
+from rbac import get_current_user, require_admin, require_user, get_cookie_name
 from test_routes import router as test_router
 
 # Configure logging
@@ -231,11 +228,46 @@ async def complete_authorization(request: AuthCompleteRequest, response: Respons
 
 
 @app.post("/api/auth/logout")
-async def logout(response: Response, graph_access_token: Optional[str] = Cookie(None)):
+async def logout(request: Request, response: Response):
     """Logout the current user and invalidate stored session."""
+
+    def get_cookie_value(possible_names):
+        for name in possible_names:
+            value = request.cookies.get(name)
+            if value:
+                return value
+        return None
+
+    def build_cookie_names(base_name: str) -> list[str]:
+        """Return cookie name variants for legacy and __Host- prefixed formats."""
+        candidates = [
+            base_name,
+            get_cookie_name(base_name),
+            f"__Host-{base_name}",
+        ]
+        # Use dict.fromkeys to deduplicate while preserving order
+        return [name for name in dict.fromkeys(candidates) if name]
+
+    deleted_session = False
+
+    graph_access_token = get_cookie_value(build_cookie_names("graph_access_token"))
     if graph_access_token:
         token_hash = hash_token(graph_access_token)
-        db.delete_session_by_token_hash(token_hash)
+        if db.get_session_by_token_hash(token_hash):
+            deleted_session = db.delete_session_by_token_hash(token_hash)
+
+    if not deleted_session:
+        session_id = get_cookie_value(build_cookie_names("session_id"))
+        if session_id:
+            deleted_session = db.delete_session_by_session_id(session_id)
+
+    if not deleted_session:
+        fingerprint = get_cookie_value(build_cookie_names("fingerprint"))
+        if fingerprint:
+            deleted_session = db.delete_sessions_by_fingerprint(fingerprint) > 0
+
+    if not deleted_session:
+        logger.info("Logout request received but no session record matched cookies")
 
     clear_auth_cookies(response)
     response.delete_cookie("fingerprint")

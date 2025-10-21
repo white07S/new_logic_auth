@@ -148,10 +148,33 @@ class Database:
         self.sessions.remove(Session.device_id == device_id)
         logger.info("Deleted session for device_id=%s", device_id)
 
-    def delete_session_by_token_hash(self, token_hash: str):
+    def delete_session_by_token_hash(self, token_hash: str) -> bool:
         Session = Query()
-        self.sessions.remove(Session.token_hash == token_hash)
-        logger.info("Deleted session for token hash")
+        removed = self.sessions.remove(Session.token_hash == token_hash)
+        if removed:
+            logger.info("Deleted session for token hash")
+            return True
+        return False
+
+    def delete_session_by_session_id(self, session_id: str) -> bool:
+        """Remove session(s) matching the issued session identifier."""
+        Session = Query()
+        removed = self.sessions.remove(Session.session_id == session_id)
+        if removed:
+            logger.info("Deleted session for session_id=%s", session_id)
+            return True
+        return False
+
+    def delete_sessions_by_fingerprint(self, fingerprint: str) -> int:
+        """Remove all sessions associated with a browser fingerprint."""
+        Session = Query()
+        removed = self.sessions.remove(Session.fingerprint == fingerprint)
+        removed_count = len(removed) if removed else 0
+        if removed_count:
+            logger.info(
+                "Deleted %d session(s) for fingerprint=%s", removed_count, fingerprint
+            )
+        return removed_count
 
     def get_user_devices(self, user_id: str) -> List[Dict]:
         Session = Query()
