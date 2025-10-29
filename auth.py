@@ -125,6 +125,8 @@ async def run_az_login(session_id: str, config_dir: Path):
     json_lines = []
     seen_first_json = False
 
+    promoted_to_user_dir = False
+
     try:
         while True:
             line = await proc.stdout.readline()
@@ -270,6 +272,7 @@ async def run_az_login(session_id: str, config_dir: Path):
                 os.chmod(target_dir, 0o700)
             except PermissionError:
                 pass
+            promoted_to_user_dir = True
 
             auth_sessions[session_id].update(
                 {
@@ -307,5 +310,6 @@ async def run_az_login(session_id: str, config_dir: Path):
     finally:
         if proc.returncode is None:
             proc.kill()
-        # Clean up the AZURE_CONFIG_DIR for this session
-        shutil.rmtree(config_dir, ignore_errors=True)
+        if not promoted_to_user_dir and config_dir.exists():
+            # Only remove the temporary directory if it wasn't promoted to a user cache
+            shutil.rmtree(config_dir, ignore_errors=True)
