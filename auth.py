@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Optional
 
-from fastapi import Response
+from fastapi import Request, Response
 
 import config
 from azure_config import get_user_config_dir, sanitize_identifier
@@ -66,6 +66,50 @@ def clear_session_cookies(response: Response):
     # Also delete old format cookies during transition
     response.delete_cookie("fingerprint", path="/")
     response.delete_cookie("session_id", path="/")
+
+
+def refresh_session_cookies(
+    response: Response,
+    request: Request,
+    session_id: str,
+    fingerprint: Optional[str] = None,
+) -> None:
+    """Refresh session cookies to maintain sliding expiration."""
+
+    max_age = config.GRAPH_TOKEN_TTL_MINUTES * 60
+    set_session_cookie(response, session_id, max_age_seconds=max_age)
+
+    is_production = config.ENVIRONMENT == "production"
+    cookie_prefix = "__Host-" if is_production else ""
+
+    fingerprint_value = (
+        request.cookies.get(f"{cookie_prefix}fingerprint")
+        or request.cookies.get("fingerprint")
+        or fingerprint
+    )
+    if fingerprint_value:
+        response.set_cookie(
+            key=f"{cookie_prefix}fingerprint",
+            value=fingerprint_value,
+            httponly=True,
+            max_age=max_age,
+            samesite="strict" if is_production else "lax",
+            secure=is_production,
+            path="/",
+        )
+
+    csrf_cookie_name = f"{cookie_prefix}csrf_token"
+    csrf_value = request.cookies.get(csrf_cookie_name) or request.cookies.get("csrf_token")
+    if csrf_value:
+        response.set_cookie(
+            key=csrf_cookie_name,
+            value=csrf_value,
+            httponly=False,
+            max_age=max_age,
+            samesite="strict" if is_production else "lax",
+            secure=is_production,
+            path="/",
+        )
 
 
 async def _run_az_command(command: list, env: Dict[str, str]) -> str:

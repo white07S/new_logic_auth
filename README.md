@@ -48,6 +48,7 @@ authorization/
 - `AZ_LOGIN_TIMEOUT`: timeout (seconds) for the initial `az login` device-code
   flow.
 - `AZURE_ROLE_GROUP_MAPPING`: maps Azure AD group IDs to application roles.
+- `DEFAULT_ROLE`: optional fallback role (e.g. `user`) when no group mapping matches.
 - `GRAPH_TOKEN_TTL_MINUTES`: reused as the cookie lifetime for the
   session/fingerprint pair.
 - `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`:
@@ -68,6 +69,8 @@ See `TOKEN_FLOW_EXPLANATION.md` for a deep dive into the authentication flow.
    HttpOnly cookies (`session_id`, `fingerprint`, `csrf_token`).
 4. **Authenticated requests** – `rbac.get_current_user` resolves the session by
    cookie, validates the fingerprint, and injects `TokenData` into dependencies.
+   Each successful call slides the cookie expiration forward to keep the session
+   alive while the user stays active.
 5. **Azure OpenAI** – `/api/azure/chat-test` builds an `AzureOpenAI` client via
    `AzureCliCredential`, so refresh tokens are handled by the Azure CLI cache.
 6. **Logout** – `POST /api/auth/logout` drops the in-memory session and clears

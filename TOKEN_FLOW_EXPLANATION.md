@@ -9,6 +9,7 @@ application keeps only lightweight in-memory session metadata.
   user-specific Azure CLI config folders.
 - `AZURE_ROLE_GROUP_MAPPING`: maps Azure AD group IDs to in-app roles
   (e.g. admins vs. users).
+- `DEFAULT_ROLE`: optional fallback role applied when no groups match.
 - `GRAPH_TOKEN_TTL_MINUTES`: reused as the browser session cookie lifetime.
 - `AZURE_OPENAI_*`: endpoint, API version, and optional tenant defaults for the
   per-user Azure OpenAI client factory.
@@ -37,6 +38,8 @@ application keeps only lightweight in-memory session metadata.
      user's Azure CLI config directory.
    - The server issues HttpOnly cookies for `session_id` and the fingerprint, and
      returns a CSRF token for subsequent requests.
+   - Every authenticated request refreshes these cookies to provide a sliding
+     expiration window while the browser remains active.
 
 4. **Authenticated requests**
    - `rbac.get_current_user` resolves the session by `session_id`, verifies the

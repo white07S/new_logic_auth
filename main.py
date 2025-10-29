@@ -11,6 +11,7 @@ import config
 from auth import (
     auth_sessions,
     clear_session_cookies,
+    refresh_session_cookies,
     run_az_login,
     set_session_cookie,
 )
@@ -260,8 +261,19 @@ async def logout(request: Request, response: Response):
 
 
 @app.get("/api/me", response_model=UserResponse)
-async def get_current_user_info(current_user=Depends(get_current_user)):
+async def get_current_user_info(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+):
     """Return the currently authenticated user's profile."""
+
+    refresh_session_cookies(
+        response,
+        request,
+        current_user.session_id,
+        current_user.fingerprint,
+    )
 
     AuditLogger.log_session_event(
         "access",
@@ -280,12 +292,23 @@ async def get_current_user_info(current_user=Depends(get_current_user)):
 
 
 @app.get("/api/check-auth")
-async def check_auth(request: Request, current_user=Depends(get_current_user)):
+async def check_auth(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+):
     """Check if user is authenticated and return session state."""
 
     is_production = config.ENVIRONMENT == "production"
     csrf_cookie_name = "__Host-csrf_token" if is_production else "csrf_token"
     csrf_token = request.cookies.get(csrf_cookie_name)
+
+    refresh_session_cookies(
+        response,
+        request,
+        current_user.session_id,
+        current_user.fingerprint,
+    )
 
     return {
         "authenticated": True,
@@ -308,7 +331,11 @@ async def check_auth(request: Request, current_user=Depends(get_current_user)):
 
 
 @app.get("/api/session/info")
-async def get_session_info(current_user=Depends(get_current_user)):
+async def get_session_info(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+):
     """Get detailed session information.
 
     Provides session details for the frontend to display token status
@@ -318,6 +345,13 @@ async def get_session_info(current_user=Depends(get_current_user)):
 
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    refresh_session_cookies(
+        response,
+        request,
+        current_user.session_id,
+        current_user.fingerprint,
+    )
 
     return {
         "session_id": session.session_id,
@@ -334,9 +368,20 @@ async def get_session_info(current_user=Depends(get_current_user)):
 
 
 @app.get("/api/admin/sessions")
-async def get_all_sessions(current_user=Depends(require_admin)):
+async def get_all_sessions(
+    request: Request,
+    response: Response,
+    current_user=Depends(require_admin),
+):
     """Get all active sessions (Admin only)."""
     sessions = list_sessions()
+
+    refresh_session_cookies(
+        response,
+        request,
+        current_user.session_id,
+        current_user.fingerprint,
+    )
     return {
         "total_sessions": len(sessions),
         "sessions": sessions,
@@ -344,9 +389,20 @@ async def get_all_sessions(current_user=Depends(require_admin)):
 
 
 @app.get("/api/me/devices")
-async def get_my_devices(current_user=Depends(get_current_user)):
+async def get_my_devices(
+    request: Request,
+    response: Response,
+    current_user=Depends(get_current_user),
+):
     """Get all devices for current user."""
     devices = get_sessions_for_user(current_user.azure_object_id)
+
+    refresh_session_cookies(
+        response,
+        request,
+        current_user.session_id,
+        current_user.fingerprint,
+    )
     return {
         "total_devices": len(devices),
         "devices": devices,
@@ -355,7 +411,9 @@ async def get_my_devices(current_user=Depends(get_current_user)):
 
 @app.post("/api/azure/chat-test")
 async def azure_chat_test(
-    request: AzureChatRequest,
+    payload: AzureChatRequest,
+    http_request: Request,
+    response: Response,
     current_user=Depends(get_current_user),
 ):
     """Execute a simple Azure OpenAI chat completion using the caller's credentials."""
@@ -377,13 +435,16 @@ async def azure_chat_test(
         completion = await asyncio.to_thread(
             client.chat.completions.create,
             model=config.AZURE_OPENAI_DEPLOYMENT,
-            messages=[{"role": "user", "content": request.message}],
+            messages=[{"role": "user", "content": payload.message}],
             temperature=0.2,
             extra_headers={"x-ms-client-request-id": request_id},
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Azure OpenAI chat call failed")
-        raise HTTPException(status_code=502, detail="Azure OpenAI request failed") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Azure OpenAI request failed: {exc}",
+        ) from exc
 
     content = ""
     if getattr(completion, "choices", None):
@@ -393,14 +454,23 @@ async def azure_chat_test(
     if hasattr(usage, "model_dump"):
         usage = usage.model_dump()
 
+    response.headers["X-Request-ID"] = request_id
+
     AuditLogger.log_session_event(
         "azure_chat",
         current_user.session_id,
         {
             "request_id": request_id,
-            "message_length": len(request.message or ""),
+            "message_length": len(payload.message or ""),
             "response_length": len(content),
         },
+    )
+
+    refresh_session_cookies(
+        response,
+        http_request,
+        current_user.session_id,
+        current_user.fingerprint,
     )
 
     return {

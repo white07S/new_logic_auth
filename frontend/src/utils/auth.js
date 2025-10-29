@@ -78,9 +78,10 @@ export const getFingerprint = () => {
  *
  * @returns {Promise<boolean>} True if authenticated
  */
-export const isAuthenticated = async () => {
+export const isAuthenticated = async (options = {}) => {
+  const { forceRefresh = false } = options;
   try {
-    const authData = await checkAuthWithServer();
+    const authData = await checkAuthWithServer(forceRefresh);
     return authData && authData.authenticated === true;
   } catch (error) {
     console.error('Authentication check failed:', error);
@@ -94,9 +95,10 @@ export const isAuthenticated = async () => {
  *
  * @returns {Promise<object|null>} User object or null
  */
-export const getCurrentUser = async () => {
+export const getCurrentUser = async (options = {}) => {
+  const { forceRefresh = false } = options;
   try {
-    const authData = await checkAuthWithServer();
+    const authData = await checkAuthWithServer(forceRefresh);
     return authData ? authData.user : null;
   } catch (error) {
     console.error('Failed to get current user:', error);
@@ -109,9 +111,9 @@ export const getCurrentUser = async () => {
  *
  * @returns {Promise<string|null>} CSRF token or null
  */
-export const getCSRFToken = async () => {
+export const getCSRFToken = async (forceRefresh = false) => {
   try {
-    const authData = await checkAuthWithServer();
+    const authData = await checkAuthWithServer(forceRefresh);
     return authData ? authData.csrf_token : null;
   } catch (error) {
     console.error('Failed to get CSRF token:', error);

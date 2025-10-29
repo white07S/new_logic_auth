@@ -1,10 +1,11 @@
 """
 Test routes to demonstrate RBAC (Role-Based Access Control)
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from typing import List, Dict
 from models import TokenData
 from rbac import get_current_user, require_admin, require_user
+from auth import refresh_session_cookies
 
 router = APIRouter(prefix="/api/test", tags=["Testing"])
 
@@ -22,8 +23,13 @@ async def public_endpoint():
 # ============= USER LEVEL ROUTES =============
 
 @router.get("/user/profile")
-async def get_user_profile(current_user: TokenData = Depends(require_user)):
+async def get_user_profile(
+    request: Request,
+    response: Response,
+    current_user: TokenData = Depends(require_user),
+):
     """User endpoint - Requires user or admin role"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     return {
         "message": "User profile data retrieved successfully",
         "access_level": "user",
@@ -39,9 +45,12 @@ async def get_user_profile(current_user: TokenData = Depends(require_user)):
 @router.post("/user/data")
 async def create_user_data(
     data: Dict,
+    request: Request,
+    response: Response,
     current_user: TokenData = Depends(require_user)
 ):
     """User POST endpoint - Requires user or admin role"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     return {
         "message": "Data created successfully",
         "access_level": "user",
@@ -54,8 +63,13 @@ async def create_user_data(
 # ============= ADMIN ONLY ROUTES =============
 
 @router.get("/admin/users")
-async def get_all_users(current_user: TokenData = Depends(require_admin)):
+async def get_all_users(
+    request: Request,
+    response: Response,
+    current_user: TokenData = Depends(require_admin)
+):
     """Admin endpoint - Requires admin role only"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     return {
         "message": "All users list retrieved successfully",
         "access_level": "admin",
@@ -75,9 +89,12 @@ async def get_all_users(current_user: TokenData = Depends(require_admin)):
 @router.post("/admin/settings")
 async def update_settings(
     settings: Dict,
+    request: Request,
+    response: Response,
     current_user: TokenData = Depends(require_admin)
 ):
     """Admin POST endpoint - Requires admin role only"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     return {
         "message": "System settings updated successfully",
         "access_level": "admin",
@@ -88,8 +105,13 @@ async def update_settings(
     }
 
 @router.get("/admin/stats")
-async def get_system_stats(current_user: TokenData = Depends(require_admin)):
+async def get_system_stats(
+    request: Request,
+    response: Response,
+    current_user: TokenData = Depends(require_admin)
+):
     """Admin endpoint - Get system statistics"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     return {
         "message": "System statistics retrieved successfully",
         "access_level": "admin",
@@ -108,8 +130,13 @@ async def get_system_stats(current_user: TokenData = Depends(require_admin)):
 # ============= ROLE INFORMATION ENDPOINT =============
 
 @router.get("/roles/info")
-async def get_role_info(current_user: TokenData = Depends(get_current_user)):
+async def get_role_info(
+    request: Request,
+    response: Response,
+    current_user: TokenData = Depends(get_current_user)
+):
     """Get information about current user's roles and accessible endpoints"""
+    refresh_session_cookies(response, request, current_user.session_id, current_user.fingerprint)
     is_admin = "admin" in current_user.roles
     is_user = "user" in current_user.roles or is_admin
 

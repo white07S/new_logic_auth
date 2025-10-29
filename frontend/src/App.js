@@ -6,7 +6,7 @@ import LoginModal from './components/LoginModal';
 import Home from './pages/Home';
 import Page1 from './pages/Page1';
 import Page2 from './pages/Page2';
-import { isAuthenticated, getCurrentUser, refreshAuth } from './utils/auth';
+import { isAuthenticated, getCurrentUser } from './utils/auth';
 import './App.css';
 
 function App() {
@@ -22,12 +22,8 @@ function App() {
           setAuthLoading(true);
         }
 
-        if (forceRefresh) {
-          await refreshAuth();
-        }
-
-        const isAuth = await isAuthenticated();
-        const user = isAuth ? await getCurrentUser() : null;
+        const isAuth = await isAuthenticated({ forceRefresh });
+        const user = isAuth ? await getCurrentUser({ forceRefresh }) : null;
 
         setAuthenticated(isAuth);
         setCurrentUser(user);
@@ -205,7 +201,7 @@ function App() {
 
     const pollAuth = async () => {
       if (!isActive) return;
-      await syncAuthState();
+      await syncAuthState({ forceRefresh: true });
     };
 
     // Run an immediate refresh so session info stays current
