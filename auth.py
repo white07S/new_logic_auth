@@ -96,6 +96,9 @@ def _resolve_roles(group_ids: Optional[list]) -> Dict[str, list]:
                 matched_roles.append(role)
                 break
 
+    if not matched_roles and config.DEFAULT_ROLE:
+        matched_roles.append(config.DEFAULT_ROLE)
+
     return {"roles": sorted(set(matched_roles))}
 
 

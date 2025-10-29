@@ -21,6 +21,9 @@ AZURE_ROLE_GROUP_MAPPING: Dict[str, List[str]] = {
     "user": [gid for gid in os.getenv("AZURE_USER_GROUP_IDS", "").split(",") if gid],
 }
 
+# Optional default role assigned when no group mapping matches
+DEFAULT_ROLE = os.getenv("DEFAULT_ROLE", "").strip()
+
 # Security settings
 CSRF_SECRET_KEY = os.getenv("CSRF_SECRET_KEY", secrets.token_hex(32))
 SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", secrets.token_hex(32))
