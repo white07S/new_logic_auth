@@ -53,10 +53,10 @@ const LoginModal = ({ isOpen, onClose, onLoginSuccess, onError }) => {
           if (status.authorized) {
             // Complete the auth flow
             try {
-              const result = await authAPI.completeAuth(sid);
+              await authAPI.completeAuth(sid);
               setStep('success');
               // Trigger success callback immediately, then close
-              onLoginSuccess(result.user);
+              onLoginSuccess();
               setTimeout(() => {
                 onClose();
               }, 800);

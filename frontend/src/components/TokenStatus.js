@@ -1,27 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Clock, Fingerprint, RefreshCw } from 'lucide-react';
+import { Shield, Fingerprint, RefreshCw, ServerCog, Clock } from 'lucide-react';
 import { authAPI } from '../utils/api';
 
-const formatTimeRemaining = (isoExpiry) => {
-  if (!isoExpiry) return 'Unknown';
-  const expiresAt = new Date(isoExpiry);
-  const now = new Date();
-  const diffMs = expiresAt.getTime() - now.getTime();
-  if (diffMs <= 0) return 'Expired';
-
-  const diffMinutes = Math.floor(diffMs / 60000);
-  if (diffMinutes < 60) {
-    return `${diffMinutes} minute${diffMinutes === 1 ? '' : 's'}`;
+const formatTimestamp = (timestamp) => {
+  if (!timestamp) return 'Unknown';
+  try {
+    return new Date(timestamp).toLocaleString();
+  } catch (error) {
+    return 'Unknown';
   }
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  const remainingMinutes = diffMinutes % 60;
-  if (diffHours < 24) {
-    return `${diffHours}h ${remainingMinutes}m`;
-  }
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} day${diffDays === 1 ? '' : 's'}`;
 };
 
 const TokenStatus = () => {
@@ -35,13 +22,13 @@ const TokenStatus = () => {
       // Fetch session info from server
       const data = await authAPI.getSessionInfo();
       setSessionInfo({
-        expiresAt: data.expires_at,
-        createdAt: data.created_at,
-        lastUsedAt: data.last_used_at,
         sessionId: data.session_id,
-        deviceId: data.device_id,
-        rotated: data.rotated,
-        fingerprintBound: true, // Always true in new system
+        createdAt: data.created_at,
+        lastSeenAt: data.last_seen_at,
+        azureConfigDir: data.azure_config_dir,
+        azureTenantId: data.azure_tenant_id,
+        userIdentifier: data.user_identifier,
+        fingerprint: data.fingerprint,
       });
     } catch (err) {
       console.error('Failed to fetch session info:', err);
@@ -97,63 +84,57 @@ const TokenStatus = () => {
   }
 
   if (!sessionInfo) return null;
-
-  const timeRemaining = formatTimeRemaining(sessionInfo.expiresAt);
-  const isExpired = timeRemaining === 'Expired';
+  const lastSeenLabel = formatTimestamp(sessionInfo.lastSeenAt);
+  const createdLabel = formatTimestamp(sessionInfo.createdAt);
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div className="flex items-center gap-3 mb-4">
-        <div className={`w-10 h-10 ${isExpired ? 'bg-red-100' : 'bg-green-100'} rounded-lg flex items-center justify-center`}>
-          <Shield className={isExpired ? 'text-red-600' : 'text-green-600'} size={20} />
+        <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+          <Shield className="text-green-600" size={20} />
         </div>
         <div>
           <h3 className="text-lg font-semibold text-black">Session Status</h3>
-          <p className="text-sm text-gray-600">
-            Secure server-side session {sessionInfo.rotated && '(rotated)'}
-          </p>
+          <p className="text-sm text-gray-600">Secure server-side session managed by Azure CLI tokens</p>
         </div>
       </div>
 
       <div className="space-y-3">
-        <div className={`flex items-start gap-3 p-3 ${isExpired ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'} rounded border`}>
-          <Clock size={18} className={`${isExpired ? 'text-red-600' : 'text-green-600'} mt-0.5`} />
+        <div className="flex items-start gap-3 p-3 bg-green-50 border border-green-200 rounded">
+          <Clock size={18} className="text-green-600 mt-0.5" />
           <div className="flex-1">
-            <div className="text-sm font-medium text-black">Session Token</div>
-            <div className="text-xs text-gray-600">
-              {isExpired ? 'Session expired' : `Expires in ${timeRemaining}`}
-            </div>
-            {sessionInfo.lastUsedAt && (
-              <div className="text-xs text-gray-500 mt-1">
-                Last active: {new Date(sessionInfo.lastUsedAt).toLocaleString()}
-              </div>
-            )}
-            <div className={`text-xs ${isExpired ? 'text-red-600' : 'text-green-600'} mt-1`}>
-              {isExpired ? 'Please sign in again' : 'Session managed by secure HttpOnly cookies'}
-            </div>
+            <div className="text-sm font-medium text-black">Session Timeline</div>
+            <div className="text-xs text-gray-600">Created: {createdLabel}</div>
+            <div className="text-xs text-gray-600 mt-1">Last activity: {lastSeenLabel}</div>
+            <div className="text-xs text-green-600 mt-2">Session managed via HttpOnly cookies and in-memory validation</div>
           </div>
         </div>
 
-        {sessionInfo.fingerprintBound && (
+        {sessionInfo.fingerprint && (
           <div className="flex items-start gap-3 p-3 bg-blue-50 rounded border border-blue-200">
             <Fingerprint size={18} className="text-blue-600 mt-0.5" />
             <div className="flex-1">
               <div className="text-sm font-medium text-black">Browser Fingerprint</div>
-              <div className="text-xs text-gray-600">
-                Session locked to browser characteristics for security
-              </div>
-              <div className="text-xs text-blue-600 mt-1">
-                Generated per session, not stored in browser
-              </div>
+              <div className="text-xs text-gray-600">Session locked to your current browser for additional security.</div>
+              <div className="text-xs text-blue-600 mt-1">Fingerprint generated per session and never stored client-side.</div>
             </div>
           </div>
         )}
 
-        {sessionInfo.deviceId && (
-          <div className="text-xs text-gray-500 mt-2">
-            Device ID: {sessionInfo.deviceId.substring(0, 8)}...
+        <div className="flex items-start gap-3 p-3 bg-gray-50 rounded border border-gray-200">
+          <ServerCog size={18} className="text-gray-600 mt-0.5" />
+          <div className="flex-1 text-xs text-gray-600">
+            <div className="text-sm font-medium text-black mb-1">Azure CLI Workspace</div>
+            <div>Session ID: <span className="font-mono text-gray-800">{sessionInfo.sessionId?.slice(0, 12)}...</span></div>
+            <div>Identifier: {sessionInfo.userIdentifier}</div>
+            <div className="truncate">
+              Config path: <span className="font-mono text-gray-700">{sessionInfo.azureConfigDir || 'N/A'}</span>
+            </div>
+            {sessionInfo.azureTenantId && (
+              <div>Tenant: {sessionInfo.azureTenantId}</div>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
       <div className="mt-4 pt-4 border-t border-gray-200">

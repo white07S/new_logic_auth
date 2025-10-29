@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
-"""Script to view active Graph sessions with user information."""
+"""Script to view active in-memory sessions with user information.
 
-from database import db
+Note: Sessions are maintained in process memory. Run this within the same
+runtime as the FastAPI app (e.g. via an interactive shell) to inspect state.
+"""
+
+from session_manager import list_sessions
 
 def main():
     print("\n=== Active Sessions with User Information ===\n")
 
-    sessions = db.list_sessions()
+    sessions = list_sessions()
 
     if not sessions:
         print("No active sessions found.")
         return
 
     for session in sessions:
-        user = db.get_user_by_id(session["user_id"]) or {}
-        print(f"Session ID: {session['id']}")
-        print(f"  User ID: {session['user_id']}")
-        print(f"  Username: {user.get('username')}")
-        print(f"  Email: {user.get('email')}")
-        print(f"  Roles: {', '.join(user.get('roles', []))}")
-        print(f"  Device ID: {session['device_id']}")
-        print(f"  Fingerprint: {session['fingerprint']}")
-        print(f"  Expires At: {session.get('token_expires_at')}")
+        print(f"Session ID: {session['session_id']}")
+        print(f"  Email: {session['email']}")
+        print(f"  Username: {session['username']}")
+        print(f"  Roles: {', '.join(session['roles'])}")
+        print(f"  Azure Object ID: {session['azure_object_id']}")
+        print(f"  Azure Tenant ID: {session.get('azure_tenant_id')}")
+        print(f"  Azure Config Dir: {session['azure_config_dir']}")
+        print(f"  Fingerprint: {session.get('fingerprint')}")
         print(f"  Created: {session['created_at']}")
-        print(f"  Last Used: {session['last_used_at']}")
+        print(f"  Last Seen: {session['last_seen_at']}")
         print("-" * 60)
 
 if __name__ == "__main__":

@@ -4,13 +4,13 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
 from fastapi import Response
 
 import config
+from azure_config import get_user_config_dir, sanitize_identifier
 
 logger = logging.getLogger(__name__)
 
@@ -22,11 +22,13 @@ class AzureLoginError(Exception):
     """Raised when the Azure CLI flow cannot be completed."""
 
 
-def hash_token(token: str) -> str:
-    """Return a SHA256 hash of the provided token."""
-    import hashlib
-
-    return hashlib.sha256(token.encode()).hexdigest()
+def _build_user_identifier(
+    *, email: Optional[str], user_name: Optional[str], azure_object_id: Optional[str]
+) -> str:
+    base = (user_name or (email.split("@")[0] if email else None) or azure_object_id or "user").strip()
+    suffix = (azure_object_id or "").replace("-", "")[:12]
+    identifier = f"{base}-{suffix}" if suffix else base
+    return sanitize_identifier(identifier)
 
 
 def verify_fingerprint(stored_fingerprint: str, provided_fingerprint: str) -> bool:
@@ -34,55 +36,34 @@ def verify_fingerprint(stored_fingerprint: str, provided_fingerprint: str) -> bo
     return stored_fingerprint == provided_fingerprint
 
 
-def set_auth_cookies(response: Response, access_token: str, session_id: str = None):
-    """Set secure HttpOnly cookies for authentication.
+def set_session_cookie(response: Response, session_id: str, *, max_age_seconds: int) -> None:
+    """Set the session identifier cookie."""
 
-    Using __Host- prefix for maximum security (requires Secure, HttpOnly, Path=/, no Domain).
-    For development, using regular prefix with secure flag configurable.
-    """
-    max_age = config.GRAPH_TOKEN_TTL_MINUTES * 60
     is_production = config.ENVIRONMENT == "production"
-
-    # Use __Host- prefix in production for maximum security
     cookie_prefix = "__Host-" if is_production else ""
 
-    # Access token cookie (HttpOnly, cannot be accessed by JavaScript)
     response.set_cookie(
-        key=f"{cookie_prefix}graph_access_token",
-        value=access_token,
+        key=f"{cookie_prefix}session_id",
+        value=session_id,
         httponly=True,
-        max_age=max_age,
+        max_age=max_age_seconds,
         samesite="strict" if is_production else "lax",
-        secure=is_production,  # HTTPS required in production
-        path="/"
+        secure=is_production,
+        path="/",
     )
 
-    # Session ID cookie for tracking (HttpOnly)
-    if session_id:
-        response.set_cookie(
-            key=f"{cookie_prefix}session_id",
-            value=session_id,
-            httponly=True,
-            max_age=max_age,
-            samesite="strict" if is_production else "lax",
-            secure=is_production,
-            path="/"
-        )
 
-
-def clear_auth_cookies(response: Response):
+def clear_session_cookies(response: Response):
     """Remove authentication cookies from the response."""
     is_production = config.ENVIRONMENT == "production"
     cookie_prefix = "__Host-" if is_production else ""
 
     # Delete all auth-related cookies
-    response.delete_cookie(f"{cookie_prefix}graph_access_token", path="/")
     response.delete_cookie(f"{cookie_prefix}session_id", path="/")
     response.delete_cookie(f"{cookie_prefix}fingerprint", path="/")
     response.delete_cookie(f"{cookie_prefix}csrf_token", path="/")
 
     # Also delete old format cookies during transition
-    response.delete_cookie("graph_access_token", path="/")
     response.delete_cookie("fingerprint", path="/")
     response.delete_cookie("session_id", path="/")
 
@@ -267,34 +248,28 @@ async def run_az_login(session_id: str, config_dir: Path):
                 )
                 return
 
-            access_token_raw = await _run_az_command(
-                [
-                    "az",
-                    "account",
-                    "get-access-token",
-                    "--resource",
-                    config.GRAPH_RESOURCE,
-                    "--output",
-                    "json",
-                ],
-                env,
+            primary_account = accounts[0]
+            tenant_id = (
+                primary_account.get("tenantId")
+                or primary_account.get("homeTenantId")
+                or user_info.get("tenantId")
             )
-            token_payload = json.loads(access_token_raw)
-            graph_token = token_payload.get("accessToken")
-            tenant_id = token_payload.get("tenant")
-            graph_token_expires_on = token_payload.get("expiresOn")
-            custom_expiry = (
-                datetime.utcnow() + timedelta(minutes=config.GRAPH_TOKEN_TTL_MINUTES)
-            ).isoformat()
 
-            if not graph_token:
-                auth_sessions[session_id].update(
-                    {
-                        "status": "error",
-                        "message": "Failed to fetch Graph access token",
-                    }
-                )
-                return
+            user_identifier = _build_user_identifier(
+                email=email,
+                user_name=user_name,
+                azure_object_id=azure_object_id,
+            )
+
+            target_dir = get_user_config_dir(user_identifier, create=False)
+            target_dir.parent.mkdir(parents=True, exist_ok=True)
+            if target_dir.exists():
+                shutil.rmtree(target_dir, ignore_errors=True)
+            shutil.move(str(config_dir), str(target_dir))
+            try:
+                os.chmod(target_dir, 0o700)
+            except PermissionError:
+                pass
 
             auth_sessions[session_id].update(
                 {
@@ -305,11 +280,9 @@ async def run_az_login(session_id: str, config_dir: Path):
                     "roles": roles,
                     "azure_object_id": azure_object_id,
                     "azure_tenant_id": tenant_id,
-                    "graph_token": graph_token,
-                    "graph_token_expires_at": custom_expiry,
-                    "graph_token_original_expires_on": graph_token_expires_on,
-                    "message": f"Authorization successful, welcome {user_name}",
-                    "group_ids": group_ids,
+                    "azure_config_dir": str(target_dir),
+                    "user_identifier": user_identifier,
+                    "message": f"Authorization successful, welcome {user_name or email}",
                 }
             )
             logger.info(

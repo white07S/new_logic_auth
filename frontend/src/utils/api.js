@@ -31,7 +31,8 @@ const api = axios.create({
 api.interceptors.request.use(
   async (config) => {
     // Add CSRF token for state-changing requests
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(config.method.toUpperCase())) {
+    const method = config.method ? config.method.toUpperCase() : 'GET';
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
       const csrfToken = await getCSRFToken();
       if (csrfToken) {
         config.headers['X-CSRF-Token'] = csrfToken;
@@ -213,7 +214,7 @@ export const testAPI = {
    * @returns {Promise<object>} Public data
    */
   getPublic: async () => {
-    const response = await api.get('/test/public');
+    const response = await api.get('/api/test/public');
     return response.data;
   },
 
@@ -223,7 +224,7 @@ export const testAPI = {
    * @returns {Promise<object>} User data
    */
   getUserProtected: async () => {
-    const response = await api.get('/test/user');
+    const response = await api.get('/api/test/user');
     return response.data;
   },
 
@@ -233,7 +234,21 @@ export const testAPI = {
    * @returns {Promise<object>} Admin data
    */
   getAdminProtected: async () => {
-    const response = await api.get('/test/admin');
+    const response = await api.get('/api/test/admin');
+    return response.data;
+  },
+};
+
+// Azure OpenAI API
+export const azureAPI = {
+  /**
+   * Execute a simple chat completion against Azure OpenAI using the caller's credentials.
+   *
+   * @param {string} message - User message to send to the model
+   * @returns {Promise<object>} Chat response payload
+   */
+  sendChat: async (message) => {
+    const response = await api.post('/api/azure/chat-test', { message });
     return response.data;
   },
 };

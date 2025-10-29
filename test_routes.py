@@ -29,7 +29,7 @@ async def get_user_profile(current_user: TokenData = Depends(require_user)):
         "access_level": "user",
         "user": {
             "email": current_user.email,
-            "user_id": current_user.user_id,
+            "user_id": current_user.azure_object_id,
             "roles": current_user.roles
         },
         "authentication_required": True,
@@ -117,7 +117,7 @@ async def get_role_info(current_user: TokenData = Depends(get_current_user)):
         "message": "Role information retrieved successfully",
         "current_user": {
             "email": current_user.email,
-            "user_id": current_user.user_id,
+            "user_id": current_user.azure_object_id,
             "roles": current_user.roles,
             "is_admin": is_admin,
             "is_user": is_user

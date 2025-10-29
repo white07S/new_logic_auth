@@ -1,13 +1,12 @@
 import logging
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 
 import config
-from auth import hash_token, verify_fingerprint
-from database import db
+from auth import verify_fingerprint
 from models import TokenData
+from session_manager import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,84 +19,57 @@ def get_cookie_name(base_name: str) -> str:
 
 async def get_current_user(
     request: Request,
-    graph_access_token: Optional[str] = Cookie(None, alias="graph_access_token"),
-    fingerprint: Optional[str] = Cookie(None, alias="fingerprint"),
+    session_id_cookie: Optional[str] = Cookie(None, alias="session_id"),
+    fingerprint_cookie: Optional[str] = Cookie(None, alias="fingerprint"),
 ) -> TokenData:
-    """
-    Resolve the current authenticated user using the stored Graph access token.
-    Validates token existence, expiration, and browser fingerprint.
-    """
-    # Try to get cookies with environment-specific names
-    token_cookie_name = get_cookie_name("graph_access_token")
+    """Resolve the current authenticated user using the session cookie."""
+
+    session_cookie_name = get_cookie_name("session_id")
     fingerprint_cookie_name = get_cookie_name("fingerprint")
 
-    # Get token from appropriate cookie
-    actual_token = request.cookies.get(token_cookie_name) or graph_access_token
-    actual_fingerprint = request.cookies.get(fingerprint_cookie_name) or fingerprint
-
-    if not actual_token:
+    session_id = request.cookies.get(session_cookie_name) or session_id_cookie
+    if not session_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    token_hash = hash_token(actual_token)
-    session = db.get_session_by_token_hash(token_hash)
+    session = get_session(session_id)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
+            detail="Invalid or expired session",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    expires_at_str = session.get("token_expires_at")
-    if expires_at_str:
-        try:
-            expires_at = datetime.fromisoformat(expires_at_str)
-            if datetime.utcnow() > expires_at:
-                db.delete_session_by_token_hash(token_hash)
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Session expired",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-        except ValueError:
-            logger.warning(
-                "Invalid token_expires_at format for session %s", session.get("id")
-            )
+    stored_fingerprint = session.fingerprint
+    actual_fingerprint = (
+        request.cookies.get(fingerprint_cookie_name) or fingerprint_cookie
+    )
 
-    stored_fingerprint = session.get("fingerprint")
     if stored_fingerprint and actual_fingerprint:
         if not verify_fingerprint(stored_fingerprint, actual_fingerprint):
             logger.warning(
-                "Fingerprint mismatch for user session %s", session.get("id")
+                "Fingerprint mismatch for user session %s", session.session_id
             )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Device fingerprint mismatch",
             )
 
-    user = db.get_user_by_id(session["user_id"])
-    if not user or not user.get("is_active", True):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found or inactive",
-        )
-
-    session_cookie_id = session.get("session_id")
-    session_record_id = session.get("id")
-
     return TokenData(
-        email=user["email"],
-        user_id=user["id"],
-        roles=user["roles"],
-        session_id=session_cookie_id,
-        session_record_id=session_record_id,
-        device_id=session.get("device_id"),
-        fingerprint=stored_fingerprint,
-        token_expires_at=expires_at_str,
-        azure_object_id=session.get("azure_object_id"),
+        email=session.email,
+        username=session.username,
+        roles=session.roles,
+        session_id=session.session_id,
+        azure_object_id=session.azure_object_id,
+        azure_tenant_id=session.azure_tenant_id,
+        azure_config_dir=session.azure_config_dir,
+        user_identifier=session.user_identifier,
+        fingerprint=session.fingerprint,
+        created_at=session.created_at,
+        last_seen_at=session.last_seen_at,
     )
 
 

@@ -165,9 +165,9 @@ const Page2 = ({ currentUser }) => {
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded">
-                  <p className="text-sm text-gray-500 mb-1">Last Login</p>
+                  <p className="text-sm text-gray-500 mb-1">Last Activity</p>
                   <p className="text-gray-900 font-medium">
-                    {user?.last_login ? new Date(user.last_login).toLocaleString() : 'Just now'}
+                    {user?.last_seen_at ? new Date(user.last_seen_at).toLocaleString() : 'Just now'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded">

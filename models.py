@@ -1,6 +1,5 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime
 
 # Azure Auth Models
 class AuthStartResponse(BaseModel):
@@ -20,22 +19,21 @@ class AuthCompleteRequest(BaseModel):
     fingerprint: str
 
 # Token Models
-class TokenResponse(BaseModel):
-    token_type: str = "bearer"
-    token_expires_at: str
-    roles: List[str]
-    user: "UserResponse"
-
 class TokenData(BaseModel):
-    email: Optional[str] = None
-    user_id: Optional[str] = None
-    roles: List[str] = []
-    session_id: Optional[str] = None
-    session_record_id: Optional[str] = None
-    device_id: Optional[str] = None
+    email: str
+    username: str
+    roles: List[str]
+    session_id: str
+    azure_object_id: str
+    azure_tenant_id: Optional[str] = None
+    azure_config_dir: str
+    user_identifier: str
     fingerprint: Optional[str] = None
-    token_expires_at: Optional[str] = None
-    azure_object_id: Optional[str] = None
+    created_at: str
+    last_seen_at: Optional[str] = None
+
+class AzureChatRequest(BaseModel):
+    message: str
 
 # User Models
 class UserResponse(BaseModel):
@@ -43,9 +41,9 @@ class UserResponse(BaseModel):
     email: str
     username: str
     roles: List[str]
-    is_active: bool
+    is_active: bool = True
     created_at: str
-    last_login: Optional[str] = None
+    last_seen_at: Optional[str] = None
 
 class UserCreate(BaseModel):
     email: str
@@ -54,10 +52,6 @@ class UserCreate(BaseModel):
 
 # Device Models
 class DeviceInfo(BaseModel):
-    device_id: str
     fingerprint: str
     created_at: str
-    last_used_at: Optional[str] = None
-
-
-TokenResponse.model_rebuild()
+    last_seen_at: Optional[str] = None

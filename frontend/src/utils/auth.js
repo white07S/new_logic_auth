@@ -241,28 +241,36 @@ export const hasRole = async (roles) => {
 };
 
 /**
- * Get session expiry time.
+ * Fetch session details for debugging/diagnostics.
  *
- * @returns {Promise<Date|null>} Expiry date or null
+ * @returns {Promise<object|null>} Session metadata or null if unavailable
  */
-export const getSessionExpiry = async () => {
+export const getSessionDetails = async () => {
   try {
     const response = await fetch(buildApiUrl('/api/session/info'), {
       method: 'GET',
       credentials: 'include',
       headers: {
         'Accept': 'application/json',
-        'X-CSRF-Token': await getCSRFToken() || ''
+        'X-CSRF-Token': (await getCSRFToken()) || ''
       }
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      return data.expires_at ? new Date(data.expires_at) : null;
+    if (!response.ok) {
+      return null;
     }
-    return null;
+
+    const data = await response.json();
+    return {
+      sessionId: data.session_id,
+      createdAt: data.created_at,
+      lastSeenAt: data.last_seen_at,
+      azureTenantId: data.azure_tenant_id,
+      azureConfigDir: data.azure_config_dir,
+      userIdentifier: data.user_identifier,
+    };
   } catch (error) {
-    console.error('Failed to get session expiry:', error);
+    console.error('Failed to get session details:', error);
     return null;
   }
 };
@@ -270,14 +278,16 @@ export const getSessionExpiry = async () => {
 // Utility function to format auth state for debugging (no sensitive data)
 export const getAuthDebugInfo = async () => {
   const user = await getCurrentUser();
-  const expiry = await getSessionExpiry();
+  const session = await getSessionDetails();
 
   return {
     authenticated: !!user,
     hasUser: !!user,
     userEmail: user?.email ? `${user.email.substring(0, 3)}***` : null,
     roles: user?.roles || [],
-    sessionExpiry: expiry?.toISOString() || null,
+    sessionId: session?.sessionId || null,
+    lastSeenAt: session?.lastSeenAt || null,
+    azureConfigDir: session?.azureConfigDir || null,
     cacheAge: authCache.lastChecked ? Date.now() - authCache.lastChecked : null
   };
 };

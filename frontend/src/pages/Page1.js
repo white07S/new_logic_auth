@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FileText, Calendar, Activity, ArrowRight, TestTube, CheckCircle, XCircle } from 'lucide-react';
 import api from '../utils/api';
 import TokenStatus from '../components/TokenStatus';
+import AzureChatTester from '../components/AzureChatTester';
 
 const Page1 = ({ currentUser }) => {
   const [testResults, setTestResults] = useState([]);
@@ -257,6 +258,11 @@ const Page1 = ({ currentUser }) => {
 
         {/* Token Status Section */}
         <TokenStatus />
+
+        {/* Azure OpenAI Tester */}
+        <div className="mt-8">
+          <AzureChatTester />
+        </div>
 
         {/* Info Section */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mt-8">

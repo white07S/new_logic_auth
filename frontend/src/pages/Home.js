@@ -95,7 +95,7 @@ const Home = ({ authenticated, currentUser }) => {
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
-                <span>JWT-based session management</span>
+                <span>Per-user Azure CLI credential stores (no custom JWTs)</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="text-red-600 mt-1">•</span>
