@@ -224,7 +224,7 @@ export const testAPI = {
    * @returns {Promise<object>} User data
    */
   getUserProtected: async () => {
-    const response = await api.get('/api/test/user');
+    const response = await api.get('/api/test/user/profile');
     return response.data;
   },
 
@@ -234,7 +234,7 @@ export const testAPI = {
    * @returns {Promise<object>} Admin data
    */
   getAdminProtected: async () => {
-    const response = await api.get('/api/test/admin');
+    const response = await api.get('/api/test/admin/users');
     return response.data;
   },
 };
